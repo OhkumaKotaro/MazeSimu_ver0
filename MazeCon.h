@@ -18,6 +18,8 @@ extern "C"
 #define RIGHT 2
 #define REAR 3
 #define PIVO_REAR 4
+#define START 5
+#define GOAL 6
 
 #define MAZE_SIZE 16
 #define MAX_STEP 255

@@ -89,3 +89,25 @@ void Map_Init(wallData_t *wall) {
 	wall->horizontal_known[MAZE_SIZE] = 0xffff;
 	wall->vertical_known[MAZE_SIZE] = 0xffff;
 }
+
+void Map_InitFast(wallData_t *wall) {
+	for (unsigned char i = 0; i <= MAZE_SIZE; i++)
+	{
+		wall->horizontal[i] = 0xffff;
+		wall->vertical[i] = 0xffff;
+		wall->horizontal_known[i] = 0;
+		wall->vertical_known[i] = 0;
+	}
+	//外壁をセット
+	wall->horizontal[0] = 0xffff;
+	wall->vertical[0] = 0xffff;
+	wall->horizontal[MAZE_SIZE] = 0xffff;
+	wall->vertical[MAZE_SIZE] = 0xffff;
+	//start横の壁をセットする
+	wall->vertical_known[1] = 0x0001;
+	//外壁を探査済みにする
+	wall->horizontal_known[0] = 0xffff;
+	wall->vertical_known[0] = 0xffff;
+	wall->horizontal_known[MAZE_SIZE] = 0xffff;
+	wall->vertical_known[MAZE_SIZE] = 0xffff;
+}

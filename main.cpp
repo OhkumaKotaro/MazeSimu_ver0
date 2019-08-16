@@ -1,12 +1,15 @@
 //include
 #include "DxLib.h"
 #include "MazeCon.h"
-#include <stdint.h>
-#include <stdio.h>
+#include "stdint.h"
+#include "stdio.h"
 #include "Map.h"
 #include "Maze.h"
 
-#define BOX_SIZE 48
+#define WINDOW_SIZE 700//800
+#define BOX_SIZE 42//48
+#define POLL_SIZE 6//7
+
 
 //Private variables
 
@@ -14,6 +17,7 @@
 int MazeSimu(void);
 void setSimlationWall_Init(wallData_t *wall, unsigned char select_maze);
 void updateBoxPosition(int *box_x, int *box_y, int nextdir, pos_t mypos);
+void DrawRootEx(wallData_t *wall,uint8_t gx,uint8_t gy);
 
 // This program starts from "WinMain"
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
@@ -34,7 +38,7 @@ int MazeSimu(void) {
 	//ウインドウモードで起動
 	ChangeWindowMode(TRUE);
 	// 画面サイズは最大の 800 800 にしておく
-	SetGraphMode(800, 800, 32);
+	SetGraphMode(WINDOW_SIZE, WINDOW_SIZE, 32);
 
 	if (DxLib_Init() == -1)		// ＤＸライブラリ初期化処理
 	{
@@ -43,9 +47,9 @@ int MazeSimu(void) {
 
 	int maze_number = 8;
 	char title[128];
-	int px = 0, py = 0, side_wall_x = 7, side_wall_y = 48, front_wall_x = 48, front_wall_y = 7;
-	int box_x = 10, box_y = 732, sx = 34, sy = 34;
-	int gx = 7, gy = 7;
+	int px = 0, py = 0, side_wall_x = POLL_SIZE, side_wall_y = BOX_SIZE, front_wall_x = BOX_SIZE, front_wall_y = POLL_SIZE;
+	int box_x = 10, box_y = WINDOW_SIZE-BOX_SIZE-15, sx = BOX_SIZE-POLL_SIZE*2/*34*/, sy = BOX_SIZE - POLL_SIZE * 2/*34*/;
+	unsigned char gx = 7, gy = 7;
 	int select_map = 0;
 	bool update = false;
 	double time = 0.0;
@@ -92,6 +96,7 @@ int MazeSimu(void) {
 
 	//壁情報を持った構造体を定義
 	wallData_t wall_data;
+	wallData_t wall_data_fast;
 
 	//迷路アルゴリズムを呼び出す
 
@@ -103,16 +108,19 @@ int MazeSimu(void) {
 
 	//マップを扱うクラスを定義、壁情報を初期化
 	Map_Init(&wall_data);
+	Map_InitFast(&wall_data_fast);
 
 	//歩数マップの作製
 	unsigned char nextdir = FRONT;
 	//最初の区画は進んでいるものとする
+	unsigned char flag_goal = 0;
 	Maze_UpdatePosition(nextdir, &mypos);
 
 	box_y -= BOX_SIZE;
 
 	unsigned char n_wall, e_wall, w_wall, s_wall;
-	unsigned char flag_goal = 0;
+
+	//ゴールの座標を代入
 	
 	if (check_mode==0)
 	{
@@ -125,6 +133,7 @@ int MazeSimu(void) {
 			s_wall = Maze_GetWallData(mypos.x, mypos.y, SOUTH, &sim_maze);
 
 			Map_addWall(&wall_data, &mypos, n_wall, e_wall, w_wall, s_wall);
+			Map_addWall(&wall_data_fast, &mypos, n_wall, e_wall, w_wall, s_wall);
 
 			Maze_UpdateStepMap(&flag_goal,gx, gy, &wall_data);
 			nextdir = Maze_GetNextMotion(&mypos, &wall_data);
@@ -133,6 +142,10 @@ int MazeSimu(void) {
 
 			// マシンの座標を更新する
 			Maze_UpdatePosition(nextdir, &mypos);
+			if (mypos.x==gx && mypos.y==gy)
+			{
+				flag_goal = 1;
+			}
 
 			//画面をクリア
 			ClearDrawScreen();
@@ -142,13 +155,13 @@ int MazeSimu(void) {
 			// 壁壁画関連
 			for (int i = 0; i < 16; i++) {
 				for (int j = 0; j < 16; j++) {
-					py = (16 - 1 - j) * 48;
-					px = i * 48;
+					py = (16 - 1 - j) * BOX_SIZE;
+					px = i * BOX_SIZE;
 					if (Maze_GetWallData(i, j, NORTH, &sim_maze) && !Maze_GetWallData(i, j, NORTH, &wall_data)) {
-						DrawBox(px + 7, py, px + front_wall_x + 7, py + front_wall_y, GetColor(0, 255, 0), TRUE);
+						DrawBox(px + POLL_SIZE, py, px + front_wall_x + POLL_SIZE, py + front_wall_y, GetColor(0, 255, 0), TRUE);
 					}
 					else if (Maze_GetWallData(i, j, NORTH, &wall_data)) {
-						DrawBox(px + 7, py, px + front_wall_x + 7, py + front_wall_y, GetColor(255, 0, 0), TRUE);
+						DrawBox(px + POLL_SIZE, py, px + front_wall_x + POLL_SIZE, py + front_wall_y, GetColor(255, 0, 0), TRUE);
 					}
 
 					if (Maze_GetWallData(i, j, WEST, &sim_maze) && !Maze_GetWallData(i, j, WEST, &wall_data)) {
@@ -162,10 +175,10 @@ int MazeSimu(void) {
 					DrawFormatString(px + 8, py + 12, GetColor(255, 0, 255), "%4d",Maze_GetStep(i,j));
 
 					if (Maze_GetWallData(i, j, EAST, &sim_maze) && (!Maze_GetWallData(i, j, EAST, &wall_data))) {
-						DrawBox(px + BOX_SIZE, py + 7, px + side_wall_x + BOX_SIZE, py + side_wall_y + 7, GetColor(0, 255, 0), TRUE);
+						DrawBox(px + BOX_SIZE, py + POLL_SIZE, px + side_wall_x + BOX_SIZE, py + side_wall_y + POLL_SIZE, GetColor(0, 255, 0), TRUE);
 					}
 					else if (Maze_GetWallData(i, j, EAST, &wall_data)) {
-						DrawBox(px + BOX_SIZE, py + 7, px + side_wall_x + BOX_SIZE, py + side_wall_y + 7, GetColor(255, 0, 0), TRUE);
+						DrawBox(px + BOX_SIZE, py + POLL_SIZE, px + side_wall_x + BOX_SIZE, py + side_wall_y + POLL_SIZE, GetColor(255, 0, 0), TRUE);
 					}
 
 					if (Maze_GetWallData(i, j, SOUTH, &sim_maze) && !Maze_GetWallData(i, j, SOUTH, &wall_data)) {
@@ -184,11 +197,6 @@ int MazeSimu(void) {
 			//タイトルバーに表示するテキストの準備(Win32 APIのwsprintfA関数を使用)
 			wsprintf(title, "迷路のポジション[%2d][%2d] [ercを押せば終了]", mypos.x, mypos.y);
 
-			// ゴールについたらスタート座標に戻るようにする
-			if (mypos.x == 7 && mypos.y == 7) {
-				flag_goal = 1;
-			}
-
 
 			//タイトルバーにテキストを表示する
 			SetMainWindowText(title);
@@ -203,8 +211,78 @@ int MazeSimu(void) {
 			}
 
 			//１ミリ秒待機
-			WaitTimer(100);
+			WaitTimer(10);
 		}
+	}
+
+	WaitTimer(100);
+	ClearDrawScreen();
+	ScreenFlip();
+	//Map_Init(&wall_data);
+	Maze_UpdateStepMapEx(&wall_data_fast, 7, 5, 7, 7);
+	while (!CheckHitKey(KEY_INPUT_LEFT))
+	{
+		//画面をクリア
+		ClearDrawScreen();
+		//ボックスを描画
+		DrawBox(box_x, box_y, box_x + sx, box_y + sy, GetColor(0, 0, 200), TRUE);
+
+		// 壁壁画関連
+		for (int i = 0; i < 16; i++) {
+			for (int j = 0; j < 16; j++) {
+				py = (16 - 1 - j) * BOX_SIZE;
+				px = i * BOX_SIZE;
+				if (Maze_GetWallData(i, j, NORTH, &sim_maze) && !Maze_GetWallData(i, j, NORTH, &wall_data)) {
+					DrawBox(px + POLL_SIZE, py, px + front_wall_x + POLL_SIZE, py + front_wall_y, GetColor(0, 200, 0), TRUE);
+				}
+				else if (Maze_GetWallData(i, j, NORTH, &wall_data)) {
+					DrawBox(px + POLL_SIZE, py, px + front_wall_x + POLL_SIZE, py + front_wall_y, GetColor(200, 0, 0), TRUE);
+				}
+
+				if (Maze_GetWallData(i, j, WEST, &sim_maze) && !Maze_GetWallData(i, j, WEST, &wall_data)) {
+					DrawBox(px, py, px + side_wall_x, py + side_wall_y, GetColor(0, 200, 0), TRUE);
+				}
+				else if (Maze_GetWallData(i, j, WEST, &wall_data)) {
+					DrawBox(px, py, px + side_wall_x, py + side_wall_y, GetColor(200, 0, 0), TRUE);
+				}
+
+				// 歩数の情報を表示している
+				DrawFormatString(px + 8, py + 12, GetColor(100, 100, 100), "%d\r\n%d", Maze_GetStepEx_v(i, j),Maze_GetStepEx_h(i,j));
+
+				if (Maze_GetWallData(i, j, EAST, &sim_maze) && (!Maze_GetWallData(i, j, EAST, &wall_data))) {
+					DrawBox(px + BOX_SIZE, py + POLL_SIZE, px + side_wall_x + BOX_SIZE, py + side_wall_y + POLL_SIZE, GetColor(0, 200, 0), TRUE);
+				}
+				else if (Maze_GetWallData(i, j, EAST, &wall_data)) {
+					DrawBox(px + BOX_SIZE, py + POLL_SIZE, px + side_wall_x + BOX_SIZE, py + side_wall_y + POLL_SIZE, GetColor(200, 0, 0), TRUE);
+				}
+
+				if (Maze_GetWallData(i, j, SOUTH, &sim_maze) && !Maze_GetWallData(i, j, SOUTH, &wall_data)) {
+					DrawBox(px, py + BOX_SIZE, px + front_wall_x, py + front_wall_y + BOX_SIZE, GetColor(0, 200, 0), TRUE);
+				}
+				else if (Maze_GetWallData(i, j, SOUTH, &wall_data)) {
+					DrawBox(px, py + BOX_SIZE, px + front_wall_x, py + front_wall_y + BOX_SIZE, GetColor(200, 0, 0), TRUE);
+				}
+
+			}
+		}
+		
+		DrawRootEx(&wall_data_fast,7,7);
+		//メイン画面に転送
+		ScreenFlip();
+
+
+		//タイトルバーに表示するテキストの準備(Win32 APIのwsprintfA関数を使用)
+		wsprintf(title, "迷路のポジション[%2d][%2d] [ercを押せば終了]", mypos.x, mypos.y);
+
+
+		//タイトルバーにテキストを表示する
+		SetMainWindowText(title);
+
+		//ウィンドウメッセージを処理
+		if (ProcessMessage() == -1)break;
+
+		//１ミリ秒待機
+		WaitTimer(100);
 	}
 
 	return 0;
@@ -388,5 +466,101 @@ void updateBoxPosition(int *box_x, int *box_y, int nextdir, pos_t mypos)
 		default:
 			break;
 		}
+	}
+}
+
+
+void DrawRootEx(wallData_t *wall,uint8_t gx,uint8_t gy) {
+	pos_t pos;
+	volatile uint32_t draw_x = 28;
+	volatile uint32_t draw_y = WINDOW_SIZE - BOX_SIZE + 10;
+	pos.dir = NORTH;
+	pos.x = 0;
+	pos.y = 0;
+	while (Maze_GetStepEx_h(pos.x,pos.y) != 0 && Maze_GetStepEx_v(pos.x, pos.y) != 0) {
+		volatile uint32_t buff_x = draw_x;
+		volatile uint32_t buff_y = draw_y;
+		uint8_t motion = Maze_GetNextMotionEx(&pos, wall);
+		switch (pos.dir)
+		{
+		case NORTH:
+			switch (motion)
+			{
+			case FRONT:
+				draw_y -= BOX_SIZE;
+				break;
+			case LEFT:
+				draw_x -= BOX_SIZE/2;
+				draw_y -= BOX_SIZE/2;
+				break;
+			case RIGHT:
+				draw_x += BOX_SIZE/2;
+				draw_y -= BOX_SIZE/2;
+				break;
+			default:
+				break;
+			}
+			break;
+		case EAST:
+			switch (motion)
+			{
+			case FRONT:
+				draw_x +=  BOX_SIZE;
+				break;
+			case LEFT:
+				draw_x += BOX_SIZE/2;
+				draw_y -= BOX_SIZE/2;
+				break;
+			case RIGHT:
+				draw_x += BOX_SIZE/2;
+				draw_y += BOX_SIZE/2;
+				break;
+			default:
+				break;
+			}
+			break;
+		case SOUTH:
+			switch (motion)
+			{
+			case FRONT:
+				draw_y += BOX_SIZE;
+				break;
+			case LEFT:
+				draw_x += BOX_SIZE/2;
+				draw_y += BOX_SIZE/2;
+				break;
+			case RIGHT:
+				draw_x -= BOX_SIZE/2;
+				draw_y += BOX_SIZE/2;
+				break;
+			default:
+				break;
+			}
+			break;
+		case WEST:
+			switch (motion)
+			{
+			case FRONT:
+				draw_x -= BOX_SIZE;
+				break;
+			case LEFT:
+				draw_x -= BOX_SIZE/2;
+				draw_y += BOX_SIZE/2;
+				break;
+			case RIGHT:
+				draw_x -= BOX_SIZE/2;
+				draw_y -= BOX_SIZE/2;
+				break;
+			default:
+				break;
+			}
+			break;
+		default:
+			break;
+		}
+		Maze_UpdatePosition(motion, &pos);
+		DrawLine(buff_x, buff_y,draw_x,draw_y,GetColor(255,255,255), 2);
+		//WaitTimer(1000);
+		//ScreenFlip();//	メイン画面に転送
 	}
 }
