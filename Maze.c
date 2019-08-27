@@ -12,7 +12,7 @@ volatile uint16_t stepEx_h[MAZE_SIZE+1][MAZE_SIZE+1];
 volatile uint16_t stepEx_v[MAZE_SIZE+1][MAZE_SIZE+1];
 unsigned char goal_size = 1;
 
-void Maze_UpdatePosition(unsigned char dir, pos_t *pos) {
+void Maze_UpdatePosition(uint16_t dir, pos_t *pos) {
 	if (dir > 3)
 	{
 		dir = 3;
@@ -830,9 +830,9 @@ void Maze_UpdateStepMapEx(wallData_t *wallDate, uint16_t weight_s, uint16_t weig
 }
 
 
-uint8_t Maze_GetNextMotionEx(pos_t *mypos, wallData_t *wall) {
+uint16_t Maze_GetNextMotionEx(pos_t *mypos, wallData_t *wall) {
 	volatile uint16_t tmp_step = 0xffff; // 歩数
-	uint8_t tmp_dir = 3;	 // 方向
+	uint16_t tmp_dir = 3;	 // 方向
 									 // 現在の向きに応じて場合分けし、 歩数が少ない方向を判断
 									 // 迷路外に進むのとゴールがスタートマス以外の場合(0,0)に進むのを阻止
 	uint8_t x = mypos->x;
@@ -848,7 +848,7 @@ uint8_t Maze_GetNextMotionEx(pos_t *mypos, wallData_t *wall) {
 				if (((wall->horizontal[y + 1] >> x) & 0b1) == FALSE)
 				{
 					tmp_step = stepEx_h[x][y + 1];
-					tmp_dir = FRONT;
+					tmp_dir = 2<<4|FRONT;
 				}
 			}
 		}
@@ -883,7 +883,7 @@ uint8_t Maze_GetNextMotionEx(pos_t *mypos, wallData_t *wall) {
 				if (((wall->vertical[x + 1] >> y) & 0b1) == FALSE)
 				{
 					tmp_step = stepEx_v[x + 1][y];
-					tmp_dir = FRONT;
+					tmp_dir = 2 << 4 | FRONT;
 				}
 			}
 		}
@@ -918,7 +918,7 @@ uint8_t Maze_GetNextMotionEx(pos_t *mypos, wallData_t *wall) {
 				if (((wall->horizontal[y] >> x) & 0b1) == FALSE)
 				{
 					tmp_step = stepEx_h[x][y];
-					tmp_dir = FRONT;
+					tmp_dir = 2 << 4 | FRONT;
 				}
 			}
 		}
@@ -953,7 +953,7 @@ uint8_t Maze_GetNextMotionEx(pos_t *mypos, wallData_t *wall) {
 				if (((wall->vertical[x] >> y) & 0b1) == FALSE)
 				{
 					tmp_step = stepEx_v[x][y];
-					tmp_dir = FRONT;
+					tmp_dir = 2 << 4 | FRONT;
 				}
 			}
 		}
@@ -992,4 +992,386 @@ uint16_t Maze_GetStepEx_h(uint8_t x, uint8_t y) {
 
 uint16_t Maze_GetStepEx_v(uint8_t x, uint8_t y) {
 	return stepEx_v[x][y];
+}
+
+
+void Compress_T90(uint16_t *motion, uint8_t *origin_tail)
+{
+	volatile uint8_t head = 0;
+	volatile uint8_t tail = *origin_tail;
+	volatile uint8_t buff_tail = 0;
+	volatile uint16_t buff_motion[MAX_STEP];
+
+	while (head < tail)
+	{
+		buff_motion[buff_tail] = *(motion + head);
+		buff_tail++;
+		if (*(motion + head) == LEFT || *(motion + head) == RIGHT)
+		{
+			head++;
+			buff_motion[buff_tail] = *(motion + head);
+			buff_tail++;
+			if ((*(motion + head ) == ((2 << 4) | FRONT)) && ((*(motion + head - 2) & 0xf) == FRONT))
+			{
+				buff_tail -= 3;
+				if (buff_motion[buff_tail] == ((2 << 4) | FRONT)) {
+					buff_motion[buff_tail] = 1<<4|ADJUST;
+					buff_tail++;
+				}
+				buff_motion[buff_tail] = T_90 << 4 | *(motion + head - 1);
+				buff_tail++;
+				buff_motion[buff_tail] = (1 << 4) | FRONT;
+				buff_tail++;
+			}else if (((*(motion + head)&0xf) == ADJUST) && ((*(motion + head - 2) & 0xf) == FRONT))
+			{
+				buff_tail -= 3;
+				if (buff_motion[buff_tail] == ((2 << 4) | FRONT)) {
+					buff_motion[buff_tail] = 1<<4|ADJUST;
+					buff_tail++;
+				}
+				buff_motion[buff_tail] = T_90 << 4 | *(motion + head - 1);
+				buff_tail++;
+				head++;
+				buff_motion[buff_tail] = *(motion+head);
+				buff_tail++;
+			}
+			else if (*(motion + head) == GOAL && ((*(motion + head - 2) & 0xf) == FRONT)) {
+				buff_tail -= 3;
+				if (buff_motion[buff_tail] ==(( 2 << 4) | FRONT)) {
+					buff_motion[buff_tail] = 1<<4|ADJUST;
+					buff_tail++;
+				}
+				buff_motion[buff_tail] = (T_90 << 4) | *(motion + head - 1);
+				buff_tail++;
+				buff_motion[buff_tail] = GOAL;
+				buff_tail++;
+				break;
+			}
+		}
+		head++;
+	}
+	for (uint8_t i = 0; i < buff_tail; i++) {
+		motion[i] = buff_motion[i];
+	}
+	*origin_tail = buff_tail;
+}
+
+void Compress_T180(uint16_t *motion, uint8_t *origin_tail) {
+	uint8_t head = 0;
+	uint8_t tail = *origin_tail;
+	uint8_t buff_tail = 0;
+	uint16_t buff_motion[MAX_STEP];
+
+	while (head < tail)
+	{
+		buff_motion[buff_tail] = *(motion + head);
+		buff_tail++;
+		if (*(motion + head) == LEFT || *(motion + head) == RIGHT)
+		{
+			head++;
+			buff_motion[buff_tail] = *(motion + head);
+			buff_tail++;
+			if (*(motion + head) == *(motion + head - 1)) 
+			{
+				head++;
+				buff_motion[buff_tail] = *(motion + head);
+				buff_tail++;
+				if ((*(motion + head) == ((2 << 4) | FRONT)) && ((*(motion + head - 3)&0xf)==FRONT))
+				{
+					buff_tail -= 4;
+					if (buff_motion[buff_tail] == ((2 << 4) | FRONT)) {
+						buff_motion[buff_tail] = 1<<4|ADJUST;
+						buff_tail++;
+					}
+					buff_motion[buff_tail] = (T_180 << 4) | *(motion + head - 1);
+					buff_tail++;
+					buff_motion[buff_tail] = 1 << 4 | FRONT;
+					buff_tail++;
+				}
+				else if (((*(motion + head)&0xf) == ADJUST) && ((*(motion + head - 3) & 0xf) == FRONT)) {
+					buff_tail -= 4;
+					if (buff_motion[buff_tail] == ((2 << 4) | FRONT)) {
+						buff_motion[buff_tail] = 1<<4|ADJUST;
+						buff_tail++;
+					}
+					buff_motion[buff_tail] = (T_180 << 4) | *(motion + head - 1);
+					buff_tail++;
+					head++;
+					buff_motion[buff_tail] = *(motion+head);
+					buff_tail++;
+				}
+				else if (*(motion + head) == GOAL) {
+					buff_tail -= 4;
+					if (buff_motion[buff_tail] == ((2 << 4) | FRONT) && ((*(motion + head - 3) & 0xf) == FRONT)) {
+						buff_motion[buff_tail] = 1<<4|ADJUST;
+						buff_tail++;
+					}
+					buff_motion[buff_tail] = T_180 << 4 | *(motion + head - 1);
+					buff_tail++;
+					buff_motion[buff_tail] = GOAL;
+					buff_tail++;
+					break;
+				}
+			}
+		}
+		head++;
+	}
+	for (uint8_t i = 0; i < buff_tail; i++) {
+		motion[i] = buff_motion[i];
+	}
+	*origin_tail = buff_tail;
+}
+
+void Compress_T45(uint16_t *motion, uint8_t *origin_tail)
+{
+	volatile uint8_t head = 0;
+	volatile uint8_t tail = *origin_tail;
+	volatile uint8_t buff_tail = 0;
+	volatile uint16_t buff_motion[MAX_STEP];
+
+	while (head < tail)
+	{
+		buff_motion[buff_tail] = *(motion + head);
+		buff_tail++;
+		if (*(motion + head) == LEFT || *(motion + head) == RIGHT)
+		{
+			uint8_t step = 0;
+			head++;
+			buff_motion[buff_tail] = *(motion + head);
+			buff_tail++;
+			if (*(motion + head) == *(motion + head - 1)) {
+				buff_tail -= 3;
+				if (buff_motion[buff_tail] == ((2 << 4) | FRONT)) {
+					buff_motion[buff_tail] = 1<<4|ADJUST;
+					buff_tail++;
+				}
+				buff_motion[buff_tail] = T_135IN << 4 | *(motion + head);
+				buff_tail++;
+			}
+			else if(*(motion + head) == LEFT || *(motion + head) == RIGHT)
+			{
+				buff_tail -= 3;
+				if (buff_motion[buff_tail] == ((2 << 4) | FRONT)) {
+					buff_motion[buff_tail] = 1<<4|ADJUST;
+					buff_tail++;
+				}
+				buff_motion[buff_tail] = T_45IN << 4 | *(motion + head - 1);
+				buff_tail++;
+				step = 1;
+			}
+			while (1)
+			{
+				head++;
+				if (*(motion + head) == ((2<<4)|FRONT))
+				{
+					if (step > 1)
+					{
+						buff_motion[buff_tail] = ((step-1) << 4) | DIAGONAL;
+						buff_tail++;
+					}
+					buff_motion[buff_tail] = T_45OUT << 4 | *(motion + head - 1);
+					buff_tail++;
+					buff_motion[buff_tail] = (1<<4)|FRONT;
+					buff_tail++;
+					break;
+				}
+				else if ((*(motion + head)&0xf) == ADJUST) {
+					if (step > 1)
+					{
+						buff_motion[buff_tail] = ((step-1) << 4) | DIAGONAL;
+						buff_tail++;
+					}
+					buff_motion[buff_tail] = T_45OUT << 4 | *(motion + head - 1);
+					buff_tail++;
+					head++;
+					buff_motion[buff_tail] = *(motion + head);
+					buff_tail++;
+					break;
+				}
+				else if (*(motion + head) == GOAL) {
+					if (step > 1)
+					{
+						buff_motion[buff_tail] = ((step-1) << 4) | DIAGONAL;
+						buff_tail++;
+					}
+					buff_motion[buff_tail] = T_45OUT << 4 | *(motion + head - 1);
+					buff_tail++;
+					buff_motion[buff_tail] = GOAL;
+					buff_tail++;
+					break;
+				}
+				else if(*(motion + head) == *(motion + head -1))
+				{
+					head++;
+					if (*(motion + head) == ((2<<4)|FRONT)) {
+						if (step > 1)
+						{
+							buff_motion[buff_tail] = ((step-1)  << 4) | DIAGONAL;
+							buff_tail++;
+						}
+						buff_motion[buff_tail] = T_135OUT << 4 | *(motion + head - 1);
+						buff_tail++;
+						buff_motion[buff_tail] = (1<<4)|FRONT;
+						buff_tail++;
+						break;
+					}
+					else if ((*(motion + head)&0xf) == ADJUST) {
+						if (step > 1)
+						{
+							buff_motion[buff_tail] = ((step-1) << 4) | DIAGONAL;
+							buff_tail++;
+						}
+						buff_motion[buff_tail] = T_135OUT << 4 | *(motion + head - 1);
+						buff_tail++;
+						head++;
+						buff_motion[buff_tail] = *(motion + head);
+						buff_tail++;
+						break;
+
+					}
+					else if (*(motion + head) == GOAL) {
+						if (step > 1)
+						{
+							buff_motion[buff_tail] = ((step-1) << 4) | DIAGONAL;
+							buff_tail++;
+						}
+						buff_motion[buff_tail] = T_135OUT << 4 | *(motion + head - 1);
+						buff_tail++;
+						buff_motion[buff_tail] = GOAL;
+						buff_tail++;
+						break;
+					}
+					else
+					{
+						if (step > 1)
+						{
+							buff_motion[buff_tail] = ((step-1)<<4)|DIAGONAL;
+							buff_tail++;
+							step = 1;
+						}
+						buff_motion[buff_tail] = T_V90 << 4 | *(motion + head - 1);
+						buff_tail++;
+					}
+				}
+				else if (*(motion + head) == LEFT || *(motion + head) == RIGHT)
+				{
+					step++;
+				}
+			}
+		}
+		head++;
+	}
+	for (uint8_t i = 0; i < buff_tail; i++) {
+		motion[i] = buff_motion[i];
+	}
+	*origin_tail = buff_tail;
+}
+
+
+void Maze_Compress(uint8_t mode_FastTurn, uint16_t *motion, uint32_t *velocity, uint8_t *origin_tail)
+{
+	//add fast turn
+	Compress_T90(motion, origin_tail);
+	Compress_T180(motion, origin_tail);
+	if (mode_FastTurn == TRUE)
+	{
+		Compress_T45(motion, origin_tail);
+	}
+	volatile uint8_t head = 0;
+	volatile uint8_t tail = *origin_tail;
+	volatile uint8_t buff_tail = 0;
+	volatile uint16_t buff_motion[255];
+	volatile uint32_t buff_velocity;
+	while (head < tail)
+	{
+		uint16_t step = 0;
+		switch (*(motion + head)&0xf)
+		{
+		case START:
+			head++;
+			while ((*(motion + head)&0xf) == FRONT)
+			{
+				step += (*(motion+head)>>4);
+				head++;
+			}
+			buff_motion[buff_tail] = step << 4 | START;
+			buff_tail++;
+			if (*(motion + head) == LEFT || *(motion + head) == RIGHT) {
+				if (step >= 2) {
+					step -= 2;
+					buff_tail--;
+					buff_motion[buff_tail] = step << 4 | START;
+					buff_tail++;
+					buff_motion[buff_tail] = 2<<4|ADJUST;
+					buff_tail++;
+				}
+			}
+			break;
+		case FRONT:
+			while ((*(motion + head)&0xf) == FRONT)
+			{
+				step += (*(motion + head) >> 4);
+				head++;
+			}
+			if (*(motion + head) == GOAL)
+			{
+				buff_motion[buff_tail] = (step << 4) | GOAL;
+				buff_tail++;
+				head++;
+			}
+			else
+			{
+				buff_motion[buff_tail] = step << 4 | FRONT;
+				buff_tail++;
+				if (*(motion + head) == LEFT || *(motion + head) == RIGHT) {
+					if (step > 2) {
+						step -= 2;
+						buff_tail--;
+						buff_motion[buff_tail] = step << 4 | FRONT;
+						buff_tail++;
+						buff_motion[buff_tail] = 2 << 4 | ADJUST;
+						buff_tail++;
+					}
+					else if (buff_motion[buff_tail - 2] == LEFT || buff_motion[buff_tail - 2] == RIGHT)
+					{
+						buff_tail--;
+						buff_motion[buff_tail] = 2 << 4 | ADJUST;
+						buff_tail++;
+					}
+				}
+			}
+			break;
+		default:
+			buff_motion[buff_tail] = *(motion + head);
+			buff_tail++;
+			head++;
+			break;
+		}
+	}
+	for (uint8_t i = 0; i < buff_tail; i++) {
+		*(motion + i) = buff_motion[i];
+	}
+	/*
+	tail = buff_tail;
+	head = 0;
+	buff_tail = 0;
+	
+
+	while (head < tail)
+	{
+		*(velocity + buff_tail) = (uint16_t)VELO_F << 16 | (uint16_t)VELO_F;
+		if (*(motion + head - 1) == LEFT << 4 || *(motion + head - 1) == RIGHT << 4)
+		{
+			buff_velocity = *(velocity + head) & 0xffff;
+			*(velocity + buff_tail) = (uint16_t)VELO_S << 16 | buff_velocity;
+		}
+		if (*(motion + head + 1) == LEFT << 4 || *(motion + head + 1) == RIGHT << 4)
+		{
+			buff_velocity = *(velocity + head) >> 16;
+			*(velocity + head) = buff_velocity << 16 | (uint16_t)VELO_S;
+		}
+		buff_tail++;
+		head++;
+	}*/
+	*origin_tail = buff_tail;
 }

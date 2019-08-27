@@ -10,6 +10,20 @@
 #define BOX_SIZE 42//48
 #define POLL_SIZE 6//7
 
+#define START_COLOR 0xd0d0d0
+#define FRONT_COLOR 0xd0d0d0
+#define SEARCH_COLOR 0x909090
+#define ADJUST_COLOR 0xdd0000
+#define T90_COLOR 0x0f0fff
+#define T180_COLOR 0x00dddd
+#define TV90_COLOR 0x00dd00
+#define T45IN_COLOR 0xdddd00
+#define T135IN_COLOR 0xdd00dd
+#define T45OUT_COLOR 0xdddd00
+#define T135OUT_COLOR 0xdd00dd
+#define DIAGONAL_COLOR 0xd0d0d0
+#define GOAL_COLOR 0xd0d0d0
+
 
 //Private variables
 
@@ -38,7 +52,7 @@ int MazeSimu(void) {
 	//ウインドウモードで起動
 	ChangeWindowMode(TRUE);
 	// 画面サイズは最大の 800 800 にしておく
-	SetGraphMode(WINDOW_SIZE, WINDOW_SIZE, 32);
+	SetGraphMode(WINDOW_SIZE + 400, WINDOW_SIZE, 32);
 
 	if (DxLib_Init() == -1)		// ＤＸライブラリ初期化処理
 	{
@@ -469,98 +483,415 @@ void updateBoxPosition(int *box_x, int *box_y, int nextdir, pos_t mypos)
 	}
 }
 
+void DrawFront(volatile uint32_t *x, volatile uint32_t *y,uint8_t dir,uint16_t step,uint32_t color) {
+	uint32_t x_buff = *x;
+	uint32_t y_buff = *y;
+	switch (dir)
+	{
+	case NORTH:
+		*y -= ((BOX_SIZE / 2) * (uint32_t)step);
+		break;
+	case EAST:
+		*x += ((BOX_SIZE / 2) * (uint32_t)step);
+		break;
+	case SOUTH:
+		*y += ((BOX_SIZE / 2) * (uint32_t)step);
+		break;
+	case WEST:
+		*x -= ((BOX_SIZE / 2) * (uint32_t)step);
+		break;
+	default:
+		break;
+	}
+	DrawLine(x_buff, y_buff, *x, *y,color, 2);
+}
 
-void DrawRootEx(wallData_t *wall,uint8_t gx,uint8_t gy) {
-	pos_t pos;
-	volatile uint32_t draw_x = 28;
-	volatile uint32_t draw_y = WINDOW_SIZE - BOX_SIZE + 10;
-	pos.dir = NORTH;
-	pos.x = 0;
-	pos.y = 0;
-	while (Maze_GetStepEx_h(pos.x,pos.y) != 0 && Maze_GetStepEx_v(pos.x, pos.y) != 0) {
-		volatile uint32_t buff_x = draw_x;
-		volatile uint32_t buff_y = draw_y;
-		uint8_t motion = Maze_GetNextMotionEx(&pos, wall);
-		switch (pos.dir)
+void DrawLeft(volatile uint32_t *x, volatile uint32_t *y, uint8_t dir,uint32_t color) {
+	uint32_t x_buff = *x;
+	uint32_t y_buff = *y;
+	switch (dir)
+	{
+	case NORTH:
+		*x -= (BOX_SIZE / 2);
+		*y -= (BOX_SIZE / 2);
+		break;
+	case EAST:
+		*x += (BOX_SIZE / 2);
+		*y -= (BOX_SIZE / 2);
+		break;
+	case SOUTH:
+		*x += (BOX_SIZE / 2);
+		*y += (BOX_SIZE / 2);
+		break;
+	case WEST:
+		*x -= (BOX_SIZE / 2);
+		*y += (BOX_SIZE / 2);
+		break;
+	default:
+		break;
+	}
+	DrawLine(x_buff, y_buff, *x, *y, color, 2);
+}
+
+void DrawRight(volatile uint32_t *x, volatile uint32_t *y, uint8_t dir, uint32_t color) {
+	uint32_t x_buff = *x;
+	uint32_t y_buff = *y;
+	switch (dir)
+	{
+	case NORTH:
+		*x += (BOX_SIZE / 2);
+		*y -= (BOX_SIZE / 2);
+		break;
+	case EAST:
+		*x += (BOX_SIZE / 2);
+		*y += (BOX_SIZE / 2);
+		break;
+	case SOUTH:
+		*x -= (BOX_SIZE / 2);
+		*y += (BOX_SIZE / 2);
+		break;
+	case WEST:
+		*x -= (BOX_SIZE / 2);
+		*y -= (BOX_SIZE / 2);
+		break;
+	default:
+		break;
+	}
+	DrawLine(x_buff, y_buff, *x, *y, color, 2);
+}
+
+void DrawDiagonal(volatile uint32_t *x, volatile uint32_t *y, uint8_t dir,uint16_t step,uint32_t color) {
+	switch (dir) {
+	case NORTHWEST:
+		for (int i= 0; i < step; i++) {
+			DrawLeft(x, y, dir, color);
+		}
+		break;
+	case SOUTHWEST:
+		for (int i = 0; i < step; i++) {
+			DrawLeft(x, y, dir, color);
+		}
+		break;
+	case SOUTHEAST:
+		for (int i = 0; i < step; i++) {
+			DrawLeft(x, y, dir, color);
+		}
+		break;
+	case NORTHEAST:
+		for (int i = 0; i < step; i++) {
+			DrawLeft(x, y, dir, color);
+		}
+		break;
+	}
+}
+
+void DrawFastMotion(volatile uint32_t *x, volatile uint32_t *y, uint8_t *dir_origin, uint16_t motion) {
+	uint8_t dir = *dir_origin;
+	switch (motion&0xf)
+	{
+	case START:
+		DrawFront(x, y, dir, (motion >> 4) + 1, START_COLOR);
+		break;
+	case FRONT:
+		DrawFront(x, y, dir, motion >> 4, FRONT_COLOR);
+		break;
+	case ADJUST:
+		DrawFront(x, y, dir, motion>>4, ADJUST_COLOR);
+		break;
+	case LEFT:
+		switch (motion>>4)
 		{
-		case NORTH:
-			switch (motion)
+		case SEARCH:
+			DrawLeft(x, y, dir, SEARCH_COLOR);
+			if (dir<3)
 			{
-			case FRONT:
-				draw_y -= BOX_SIZE;
-				break;
-			case LEFT:
-				draw_x -= BOX_SIZE/2;
-				draw_y -= BOX_SIZE/2;
-				break;
-			case RIGHT:
-				draw_x += BOX_SIZE/2;
-				draw_y -= BOX_SIZE/2;
-				break;
-			default:
-				break;
+				dir++;
 			}
+			else {
+				dir = 0;
+			}
+			
 			break;
-		case EAST:
-			switch (motion)
+		case T_90:
+			DrawFront(x, y, dir, 1, T90_COLOR);
+			DrawLeft(x, y, dir, T90_COLOR);
+			if (dir < 3)
 			{
-			case FRONT:
-				draw_x +=  BOX_SIZE;
-				break;
-			case LEFT:
-				draw_x += BOX_SIZE/2;
-				draw_y -= BOX_SIZE/2;
-				break;
-			case RIGHT:
-				draw_x += BOX_SIZE/2;
-				draw_y += BOX_SIZE/2;
-				break;
-			default:
-				break;
+				dir++;
 			}
+			else {
+				dir = 0;
+			}
+			DrawFront(x, y, dir, 1, T90_COLOR);
 			break;
-		case SOUTH:
-			switch (motion)
+		case T_180:
+			DrawFront(x, y, dir, 1, T180_COLOR);
+			DrawLeft(x, y, dir, T180_COLOR);
+			if (dir < 3)
 			{
-			case FRONT:
-				draw_y += BOX_SIZE;
-				break;
-			case LEFT:
-				draw_x += BOX_SIZE/2;
-				draw_y += BOX_SIZE/2;
-				break;
-			case RIGHT:
-				draw_x -= BOX_SIZE/2;
-				draw_y += BOX_SIZE/2;
-				break;
-			default:
-				break;
+				dir++;
 			}
+			else {
+				dir = 0;
+			}
+			DrawLeft(x, y, dir, T180_COLOR);
+			if (dir < 3)
+			{
+				dir++;
+			}
+			else {
+				dir = 0;
+			}
+			DrawFront(x, y, dir, 1, T180_COLOR);
 			break;
-		case WEST:
-			switch (motion)
+		case T_45IN:
+			DrawFront(x, y, dir, 1, T45IN_COLOR);
+			DrawLeft(x, y, dir, T45IN_COLOR);
+			break;
+		case T_135IN:
+			DrawFront(x, y, dir, 1, T135IN_COLOR);
+			DrawLeft(x, y, dir, T135IN_COLOR);
+			if (dir < 3)
 			{
-			case FRONT:
-				draw_x -= BOX_SIZE;
-				break;
-			case LEFT:
-				draw_x -= BOX_SIZE/2;
-				draw_y += BOX_SIZE/2;
-				break;
-			case RIGHT:
-				draw_x -= BOX_SIZE/2;
-				draw_y -= BOX_SIZE/2;
-				break;
-			default:
-				break;
+				dir++;
 			}
+			else {
+				dir = 0;
+			}
+			DrawLeft(x, y, dir, T135IN_COLOR);
+			break;
+		case T_45OUT:
+			DrawDiagonal(x, y, dir, 1, T45OUT_COLOR);
+			if (dir < 3)
+			{
+				dir++;
+			}
+			else {
+				dir = 0;
+			}
+			DrawFront(x, y, dir, 1, T45OUT_COLOR);
+			break;
+		case T_135OUT:
+			DrawDiagonal(x, y, dir, 1, T135OUT_COLOR);
+			if (dir < 3)
+			{
+				dir++;
+			}
+			else {
+				dir = 0;
+			}
+			DrawDiagonal(x, y, dir, 1, T135OUT_COLOR);
+			if (dir < 3)
+			{
+				dir++;
+			}
+			else {
+				dir = 0;
+			}
+			DrawFront(x, y, dir, 1, T135OUT_COLOR);
+			break;
+		case T_V90:
+			DrawDiagonal(x, y, dir, 1, TV90_COLOR);
+			if (dir < 3)
+			{
+				dir++;
+			}
+			else {
+				dir = 0;
+			}
+			DrawDiagonal(x, y, dir, 1, TV90_COLOR);
 			break;
 		default:
 			break;
 		}
-		Maze_UpdatePosition(motion, &pos);
-		DrawLine(buff_x, buff_y,draw_x,draw_y,GetColor(255,255,255), 2);
-		//WaitTimer(1000);
-		//ScreenFlip();//	メイン画面に転送
+		break;
+	case RIGHT:
+		switch (motion >> 4)
+		{
+		case SEARCH:
+			DrawRight(x, y, dir, SEARCH_COLOR);
+			if (dir > 0)
+			{
+				dir--;
+			}
+			else {
+				dir = 3;
+			}
+
+			break;
+		case T_90:
+			DrawFront(x, y, dir, 1, T90_COLOR);
+			DrawRight(x, y, dir, T90_COLOR);
+			if (dir > 0)
+			{
+				dir--;
+			}
+			else {
+				dir = 3;
+			}
+			DrawFront(x, y, dir, 1, T90_COLOR);
+			break;
+		case T_180:
+			DrawFront(x, y, dir, 1, T180_COLOR);
+			DrawRight(x, y, dir, T180_COLOR);
+			if (dir > 0)
+			{
+				dir--;
+			}
+			else {
+				dir = 3;
+			}
+			DrawRight(x, y, dir, T180_COLOR);
+			if (dir > 0)
+			{
+				dir--;
+			}
+			else {
+				dir = 3;
+			}
+			DrawFront(x, y, dir, 1, T180_COLOR);
+			break;
+		case T_45IN:
+			DrawFront(x, y, dir, 1, T45IN_COLOR);
+			DrawRight(x, y, dir, T45IN_COLOR);
+			if (dir > 0)
+			{
+				dir --;
+			}
+			else {
+				dir = 3;
+			}
+			break;
+		case T_135IN:
+			DrawFront(x, y, dir, 1, T135IN_COLOR);
+			DrawRight(x, y, dir, T135IN_COLOR);
+			if (dir > 0)
+			{
+				dir--;
+			}
+			else {
+				dir = 3;
+			}
+			DrawRight(x, y, dir, T135IN_COLOR);
+			if (dir > 0)
+			{
+				dir--;
+			}
+			else {
+				dir = 3;
+			}
+			break;
+		case T_45OUT:
+			DrawDiagonal(x, y, dir, 1, T45OUT_COLOR);
+			DrawFront(x, y, dir, 1, T45OUT_COLOR);
+			break;
+		case T_135OUT:
+			DrawDiagonal(x, y, dir, 1, T135OUT_COLOR);
+			if (dir > 0)
+			{
+				dir--;
+			}
+			else {
+				dir = 3;
+			}
+			DrawDiagonal(x, y, dir, 1, T135OUT_COLOR);
+			DrawFront(x, y, dir, 1, T135OUT_COLOR);
+			break;
+		case T_V90:
+			DrawDiagonal(x, y, dir, 1, TV90_COLOR);
+			if (dir > 0)
+			{
+				dir--;
+			}
+			else {
+				dir = 3;
+			}
+			DrawDiagonal(x, y, dir, 1, TV90_COLOR);
+			break;
+		default:
+			break;
+		}
+		break;
+	case DIAGONAL:
+		DrawDiagonal(x, y, dir, motion>>4, DIAGONAL_COLOR);
+		break;
+	case GOAL:
+		DrawFront(x, y, dir, (motion >> 4) + 1, GOAL_COLOR);
+		break;
+	default:
+		break;
+	}
+	*dir_origin = dir;
+}
+
+void DrawRootEx(wallData_t *wall,uint8_t gx,uint8_t gy) {
+	pos_t pos;
+	uint16_t motion[255];
+	uint8_t head = 0;
+	uint8_t tail = 0;
+	volatile uint32_t draw_x = 28;
+	volatile uint32_t draw_y = WINDOW_SIZE - 2*BOX_SIZE + 10;
+	pos.dir = NORTH;
+	pos.x = 0;
+	pos.y = 1;
+	motion[tail] = START;
+	tail++;
+	motion[tail] = 1 << 4 | FRONT;
+	tail++;
+	head+=2;
+	while (pos.x!=gx || pos.y!=gy) {
+		motion[tail] = Maze_GetNextMotionEx(&pos, wall);
+		tail++;
+		Maze_UpdatePosition(motion[head]&0xf, &pos);
+		head++;
+	}
+	motion[tail] = GOAL;
+	tail++;
+	uint32_t velocity[255];
+	Maze_Compress(FALSE, motion, velocity, &tail);
+	DrawFormatString(WINDOW_SIZE, 20, 0xC000, "▼ Fast Map ▼\r\n");
+	head = 0;
+	uint16_t point_x = WINDOW_SIZE;
+	uint16_t point_y = 20 + 15;
+
+	draw_x = 25;
+	draw_y = WINDOW_SIZE - BOX_SIZE + 15;
+	uint8_t dir = 0;
+	while (head != tail)
+	{
+		uint16_t buff = motion[head];
+		DrawFastMotion(&draw_x, &draw_y, &dir, buff);
+		switch (motion[head] & 0xf)
+		{
+		case START:
+			DrawFormatString(point_x, point_y, 0xC000, "SART:%d",motion[head]>>4);
+			break;
+		case FRONT:
+			DrawFormatString(point_x, point_y, 0xC000, "FRONT:%d", motion[head] >> 4);
+			break;
+		case LEFT:
+			DrawFormatString(point_x, point_y, 0xC000, "LEFT:%d", motion[head] >> 4);
+			break;
+		case RIGHT:
+			DrawFormatString(point_x, point_y, 0xC000, "RIGHT:%d", motion[head] >> 4);
+			break;
+		case DIAGONAL:
+			DrawFormatString(point_x, point_y, 0xC000, "DIAGONAL:%d", motion[head] >> 4);
+			break;
+		case ADJUST:
+			DrawFormatString(point_x, point_y, 0xC000, "ADJUST:%d", motion[head] >> 4);
+			break;
+		case GOAL:
+			DrawFormatString(point_x, point_y, 0xC000, "GOAL:%d", motion[head] >> 4);
+			break;
+		default:
+			break;
+		}
+		head++;
+		point_y += 15;
+		if (point_y > WINDOW_SIZE - 15) {
+			point_y = 20 + 15;
+			point_x += 200;
+		}
 	}
 }
